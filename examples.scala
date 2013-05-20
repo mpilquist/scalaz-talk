@@ -61,12 +61,12 @@ object OptionExamples extends App {
     printException(knowBetter(none))
   }
 
-  example("fold/cata") {
+  example("cata") {
     import scalaz.syntax.std.option._
     import java.net.InetAddress
 
     def ipAddress(opt: Option[InetAddress]) =
-      opt.fold(_.getHostAddress, "0.0.0.0")
+      opt.cata(_.getHostAddress, "0.0.0.0")
     println(ipAddress(Some(InetAddress.getLocalHost)))
     println(ipAddress(None))
   }
@@ -161,7 +161,7 @@ object ApplicativeExamples extends App {
 
   example("using applicative builder with case classes") {
     case class Album(name: String, artist: String)
-    println((some("Wilco") ⊛ some("Sky Blue Sky")) apply Album.apply)
+    println((some("Wilco") ⊛ some("Sky Blue Sky"))(Album))
   }
 }
 
@@ -199,8 +199,8 @@ object ValidationExamples extends App {
     import scalaz.syntax.id._
     import scalaz.Validation._
 
-    println(fromEither(42.right))
-    println(fromEither("boom".left))
+    println(fromEither(Right(42)))
+    println(fromEither(Left("boom")))
   }
 
   example("throwing to validation") {
@@ -208,7 +208,7 @@ object ValidationExamples extends App {
 
     println(fromTryCatch("42".toInt))
     println(fromTryCatch("notAnInt".toInt))
-    println(fromTryCatch("notAnInt".toInt).fail.map { _.getMessage }.validation)
+    println(fromTryCatch("notAnInt".toInt).leftMap { _.getMessage })
 
     import scalaz.syntax.bifunctor._
     println(fromTryCatch("notAnInt".toInt).<-: { _.getMessage })
@@ -269,7 +269,7 @@ object ValidationExamples extends App {
     type Metadata = Map[String, String]
 
     def justMessage[S](v: Validation[Throwable, S]): Validation[String, S] =
-      v.fail.map { _.getMessage }.validation
+      v.leftMap { _.getMessage }
 
     def extractString(metadata: Metadata, key: String): Validation[String, String] =
       metadata.get(key).toSuccess("Missing required property %s".format(key))
@@ -292,7 +292,7 @@ object ValidationExamples extends App {
     def extractManager(metadata: Metadata): Validation[String, Boolean] =
       extractString(metadata, "manager").flatMap { _.parseBoolean |> justMessage }
 
-    def extractEmployee(metadata: Metadata): ValidationNEL[String, Employee] = {
+    def extractEmployee(metadata: Metadata): ValidationNel[String, Employee] = {
       extractName(metadata).toValidationNel |@|
       extractLevel(metadata).toValidationNel |@|
       extractManager(metadata).toValidationNel
@@ -304,12 +304,13 @@ object ValidationExamples extends App {
     println(extractEmployee(Map("name" -> "Turing")))
     println(extractEmployee(Map("name" -> "", "level" -> "17", "manager" -> "notBool")))
 
-    def extractEmployees(metadata: List[Metadata]): ValidationNEL[String, List[Employee]] = {
-      val vEmps: List[ValidationNEL[String, Employee]] =
+    def extractEmployees(metadata: List[Metadata]): ValidationNel[String, List[Employee]] = {
+      val vEmps: List[ValidationNel[String, Employee]] =
         metadata map extractEmployee
 
-      vEmps.sequence[({type λ[a] = ValidationNEL[String, a]})#λ, Employee]
-      }
+      //vEmps.sequence[({type λ[a] = ValidationNel[String, a]})#λ, Employee]
+      vEmps.sequenceU
+    }
 
     println(extractEmployees(List(
       Map("name" -> "Turing", "level" -> "15", "manager" -> "false"),
